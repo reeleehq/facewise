@@ -1,0 +1,13 @@
+node_modules/
+dist/
+e2e/harness/public/
+test-results/
+playwright-report/
+*.tsbuildinfo
+.DS_Store
+.claude/handoffs/
+.claude/worktrees/
+# Photos of real people never go in this repo.
+*.jpg
+*.jpeg
+*.heic
