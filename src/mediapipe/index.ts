@@ -50,6 +50,7 @@ export function faceDetector(options: FaceDetectorOptions = {}): FaceBackend<MpD
     info: detectorInfo,
     options: { model, delegate, minDetectionConfidence, runtimePath, modelPath },
     async load({ assets }): Promise<BackendSession<MpDetection[]>> {
+      // IMAGE mode only: VIDEO (detectForVideo with ctx.mode / CallOptions.t) is reeleehq/facewise#1.
       const { vision, fileset } = await _fileset(assets('runtime', runtimePath));
       const det = await vision.FaceDetector.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: assets('model', modelPath + file), delegate },

@@ -4,6 +4,7 @@ import {
   FacePrivacyError,
   FaceResult,
   detect,
+  release,
   fixtureBackend,
   fromPixels,
   fromTile,
@@ -45,6 +46,29 @@ describe('detect: the one path', () => {
     const remote = fixtureBackend([], { privacy: { imageLeavesDevice: true, thirdPartyHosts: ['api.example.com'] } });
     await expect(detect(img, { backend: remote })).rejects.toThrow(FacePrivacyError);
     await expect(detect(img, { backend: remote, allowRemote: true })).resolves.toMatchObject({ faces: [] });
+  });
+});
+
+describe('sessions', () => {
+  it('a backend that does not run in a mode is refused before loading', async () => {
+    const { _check } = await import('../src/detect');
+    const imageOnly = fixtureBackend([], { modes: ['image'] });
+    await expect(_check(imageOnly.info, { mode: 'video' })).rejects.toThrow(/does not run in video mode/);
+  });
+  it('loads once per mode, and release() closes and forgets', async () => {
+    const { _session } = await import('../src/detect');
+    let loads = 0;
+    let closes = 0;
+    const b = fixtureBackend([]);
+    const counted = { ...b, load: async (ctx: any) => (loads++, { ...(await b.load(ctx)), close: () => void closes++ }) };
+    await detect(img, { backend: counted });
+    await detect(img, { backend: counted });
+    await _session(counted, { mode: 'video' });
+    expect(loads).toBe(2);
+    await release(counted);
+    expect(closes).toBe(2);
+    await detect(img, { backend: counted });
+    expect(loads).toBe(3);
   });
 });
 

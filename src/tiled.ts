@@ -13,8 +13,6 @@ export interface TiledOptions extends TileOptions {
   tileInput?: number;
   /** Merge threshold (overlap over the smaller box). */
   maxOverlap?: number;
-  /** Called after each tile. */
-  onProgress?: (done: number, total: number) => void;
 }
 
 function _canvas(w: number, h: number): HTMLCanvasElement | OffscreenCanvas {
@@ -28,10 +26,10 @@ function _canvas(w: number, h: number): HTMLCanvasElement | OffscreenCanvas {
 }
 
 export function tiled(inner: FaceBackend, opts: TiledOptions = {}): FaceBackend<DetectedFace[]> {
-  const { tileInput = 640, maxOverlap = 0.4, onProgress, ...tiling } = opts;
+  const { tileInput = 640, maxOverlap = 0.4, ...tiling } = opts;
   return {
     info: { ...inner.info, id: `tiled(${inner.info.id})`, modes: ['image'] },
-    options: { inner: { id: inner.info.id, options: inner.options }, tileInput, maxOverlap, ...tiling },
+    options: { inner: inner.info.id, tileInput, maxOverlap, ...tiling },
     async load(ctx) {
       const s = await inner.load(ctx);
       return {
@@ -51,7 +49,7 @@ export function tiled(inner: FaceBackend, opts: TiledOptions = {}): FaceBackend<
               const tileSize = { width: canvas.width, height: canvas.height };
               const found = s.normalise(await s.call(canvas as HTMLCanvasElement, { ...callOpts, onProgress: undefined }), tileSize);
               for (const f of found) all.push(fromTile(f, t, size));
-              (callOpts.onProgress ?? onProgress)?.(i + 1, tiles.length);
+              callOpts.onProgress?.(i + 1, tiles.length);
               await new Promise((r) => setTimeout(r, 0)); // let the page paint between tiles
             }
           } finally {

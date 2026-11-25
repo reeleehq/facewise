@@ -8,9 +8,9 @@
  */
 export * from './schema';
 export * from './geometry';
-export type { AssetResolver, BackendSession, CallOptions, FaceBackend, ImageInput } from './backend';
+export type { AssetResolver, BackendSession, CallOptions, FaceBackend, ImageInput, LoadContext, Mode } from './backend';
 export { FaceCapabilityError, FacePrivacyError, imageSize, sameOrigin } from './backend';
-export { checkCall, detect, emitsWant, session, type DetectOptions } from './detect';
+export { detect, release, type DetectOptions } from './detect';
 export { tiled, type TiledOptions } from './tiled';
 export { fixtureBackend } from './fixture';
 export { checkBackend, type ConformanceReport, type Fixture } from './conformance';

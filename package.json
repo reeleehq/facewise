@@ -63,18 +63,14 @@
   "files": [
     "dist",
     "schemas",
-    "bin"
+    "bin",
+    "assets"
   ],
   "publishConfig": {
     "access": "public"
   },
   "peerDependencies": {
     "@mediapipe/tasks-vision": "^1.2.3"
-  },
-  "peerDependenciesMeta": {
-    "@mediapipe/tasks-vision": {
-      "optional": true
-    }
   },
   "wads": {
     "ci": {

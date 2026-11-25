@@ -22,6 +22,17 @@ export interface CallOptions {
   signal?: AbortSignal;
   /** Progress of a long call, as steps done of total. */
   onProgress?: (done: number, total: number) => void;
+  /** Media time of this frame, seconds (video and live modes). */
+  t?: number;
+}
+
+/** How a session will be fed: single stills, frames of one video in order, or a live stream. */
+export type Mode = 'image' | 'video' | 'live';
+
+export interface LoadContext {
+  assets: AssetResolver;
+  mode: Mode;
+  signal?: AbortSignal;
 }
 
 export interface BackendSession<Native = unknown> {
@@ -34,9 +45,10 @@ export interface BackendSession<Native = unknown> {
 
 export interface FaceBackend<Native = unknown> {
   info: BackendInfo;
-  /** The JSON options the backend was built from (a worker can rebuild it from `{id, options}`). */
-  options: Record<string, unknown>;
-  load(ctx: { assets: AssetResolver }): Promise<BackendSession<Native>>;
+  /** The options the backend was built from, for display and logs. */
+  options?: Record<string, unknown>;
+  /** Called by facewise only, once per (assets, mode); `ctx.mode` is one of `info.modes`. */
+  load(ctx: LoadContext): Promise<BackendSession<Native>>;
 }
 
 export class FaceCapabilityError extends Error {

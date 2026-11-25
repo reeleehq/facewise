@@ -1,11 +1,12 @@
 /**
  * `detect(image)`: every face in one image, through the one path every backend goes through.
  *
- * In order: privacy gate → wanted outputs checked against the backend's declared
- * capabilities → (lazy, cached) load → native call → normalise → post-filters
- * (`minScore`, `maxFaces`) → notes → the native result attached as non-enumerable `raw`.
+ * In order: privacy gate → wanted outputs and mode checked against the backend's declared
+ * capabilities → (lazy, cached per assets and mode) load → native call → normalise →
+ * post-filters (`minScore`, `maxFaces`) → notes → the native result attached as
+ * non-enumerable `raw`. Video's `track()` (reeleehq/facewise#1) reuses `_run` per frame.
  */
-import type { AssetResolver, BackendSession, FaceBackend, ImageInput } from './backend';
+import type { AssetResolver, BackendSession, CallOptions, FaceBackend, ImageInput, Mode } from './backend';
 import { FaceCapabilityError, FacePrivacyError, imageSize, sameOrigin } from './backend';
 import type { BackendInfo, FaceResult, Want } from './schema';
 import { SCHEMA_ID } from './schema';
@@ -26,22 +27,34 @@ export interface DetectOptions {
   onProgress?: (done: number, total: number) => void;
 }
 
-const _sessions = new WeakMap<FaceBackend, Promise<BackendSession>>();
+const _sessions = new WeakMap<FaceBackend, Map<AssetResolver, Map<Mode, Promise<BackendSession>>>>();
 
-/** Load a backend once; a failed load is retried on the next call. */
-export function session(backend: FaceBackend, assets: AssetResolver = sameOrigin): Promise<BackendSession> {
-  let s = _sessions.get(backend);
+/** A loaded session for (backend, assets, mode), cached; a failed load is retried next time. */
+export function _session(backend: FaceBackend, { assets = sameOrigin, mode = 'image' }: { assets?: AssetResolver; mode?: Mode } = {}): Promise<BackendSession> {
+  let byAssets = _sessions.get(backend);
+  if (!byAssets) _sessions.set(backend, (byAssets = new Map()));
+  let byMode = byAssets.get(assets);
+  if (!byMode) byAssets.set(assets, (byMode = new Map()));
+  let s = byMode.get(mode);
   if (!s) {
-    s = backend.load({ assets }).catch((e) => {
-      _sessions.delete(backend);
+    s = backend.load({ assets, mode }).catch((e) => {
+      byMode!.delete(mode);
       throw e;
     });
-    _sessions.set(backend, s);
+    byMode.set(mode, s);
   }
   return s;
 }
 
-export function emitsWant(info: BackendInfo, want: Want): boolean {
+/** Close every session of `backend` (frees wasm and GPU memory); the next call reloads it. */
+export async function release(backend: FaceBackend): Promise<void> {
+  const byAssets = _sessions.get(backend);
+  _sessions.delete(backend);
+  if (!byAssets) return;
+  for (const byMode of byAssets.values()) for (const s of byMode.values()) await s.then((x) => x.close(), () => {});
+}
+
+function _emits(info: BackendInfo, want: Want): boolean {
   const e = info.emits;
   switch (want) {
     case 'keypoints':
@@ -57,48 +70,36 @@ export function emitsWant(info: BackendInfo, want: Want): boolean {
   }
 }
 
-/** Raise unless the backend may run here and gives every wanted output. */
-export function checkCall(info: BackendInfo, { want = [], allowRemote = false }: Pick<DetectOptions, 'want' | 'allowRemote'>, known: BackendInfo[] = []): void {
-  if (info.privacy.imageLeavesDevice && !allowRemote)
-    throw new FacePrivacyError(`facewise: backend '${info.id}' sends the image off the device; pass allowRemote: true to allow it.`);
-  const missing = want.filter((w) => !emitsWant(info, w));
-  if (missing.length) {
-    const alt = known.filter((k) => missing.every((w) => emitsWant(k, w))).map((k) => k.id);
-    throw new FaceCapabilityError(
-      `facewise: backend '${info.id}' does not give ${missing.join(', ')}.` + (alt.length ? ` These do: ${alt.join(', ')}.` : ''),
-    );
-  }
-}
-
-let _default: Promise<FaceBackend> | null = null;
-/** The default backend, imported on first use so an app that passes its own never loads it. */
-export function defaultBackend(): Promise<FaceBackend> {
-  return (_default ??= (async () => {
-    const [{ faceDetector }, { tiled }] = await Promise.all([import('./mediapipe/index'), import('./tiled')]);
-    return tiled(faceDetector());
-  })());
-}
-
-/** Infos of the backends shipped with facewise, for error messages that name alternatives. */
-export async function knownBackends(): Promise<BackendInfo[]> {
+/** Infos of the backends shipped with facewise, to name alternatives in errors. */
+async function _knownBackends(): Promise<BackendInfo[]> {
+  // seam candidate: a static ledger of backend infos once a second backend ships (reeleehq/facewise#3)
   const { detectorInfo, landmarkerInfo } = await import('./mediapipe/info');
   return [detectorInfo, landmarkerInfo];
 }
 
-export async function detect(image: ImageInput, opts: DetectOptions = {}): Promise<FaceResult> {
-  const { want = [], minScore, maxFaces, native, allowRemote, assets = sameOrigin, signal, onProgress } = opts;
-  const backend = opts.backend ?? (await defaultBackend());
-  const { info } = backend;
-  if (want.some((w) => !emitsWant(info, w))) checkCall(info, { want, allowRemote }, await knownBackends());
-  checkCall(info, { want, allowRemote });
-  signal?.throwIfAborted();
+/** Raise unless the backend may run here, in this mode, and gives every wanted output. */
+export async function _check(info: BackendInfo, { want = [], allowRemote = false, mode = 'image' }: { want?: Want[]; allowRemote?: boolean; mode?: Mode }): Promise<void> {
+  if (info.privacy.imageLeavesDevice && !allowRemote)
+    throw new FacePrivacyError(`facewise: backend '${info.id}' sends the image off the device; pass allowRemote: true to allow it.`);
+  if (!info.modes.includes(mode)) throw new FaceCapabilityError(`facewise: backend '${info.id}' does not run in ${mode} mode (it supports: ${info.modes.join(', ')}).`);
+  const missing = want.filter((w) => !_emits(info, w));
+  if (missing.length) {
+    const alt = (await _knownBackends()).filter((k) => missing.every((w) => _emits(k, w))).map((k) => k.id);
+    throw new FaceCapabilityError(`facewise: backend '${info.id}' does not give ${missing.join(', ')}.` + (alt.length ? ` These do: ${alt.join(', ')}.` : ''));
+  }
+}
 
-  const s = await session(backend, assets);
+/** One call through a loaded session: call, normalise, post-filters, notes, raw. Shared by every verb. */
+export async function _run(
+  s: BackendSession,
+  info: BackendInfo,
+  image: ImageInput,
+  { minScore, maxFaces, native, signal, onProgress, t }: CallOptions,
+): Promise<FaceResult> {
   signal?.throwIfAborted();
   const size = imageSize(image);
-  const nativeResult = await s.call(image, { minScore, maxFaces, native, signal, onProgress });
+  const nativeResult = await s.call(image, { minScore, maxFaces, native, signal, onProgress, t });
   let faces = s.normalise(nativeResult, size);
-
   const notes: string[] = [];
   if (native && Object.keys(native).length) notes.push(`native options passed to ${info.id}: ${Object.keys(native).join(', ')}`);
   if (minScore !== undefined) {
@@ -113,4 +114,21 @@ export async function detect(image: ImageInput, opts: DetectOptions = {}): Promi
   const result: FaceResult = { schema: SCHEMA_ID, backend: info.id, image: size, faces, notes };
   Object.defineProperty(result, 'raw', { value: nativeResult, enumerable: false });
   return result;
+}
+
+let _default: Promise<FaceBackend> | null = null;
+/** The default backend, imported on first use so an app that passes its own never loads it. */
+function _defaultBackend(): Promise<FaceBackend> {
+  return (_default ??= (async () => {
+    const [{ faceDetector }, { tiled }] = await Promise.all([import('./mediapipe/index'), import('./tiled')]);
+    return tiled(faceDetector());
+  })());
+}
+
+export async function detect(image: ImageInput, opts: DetectOptions = {}): Promise<FaceResult> {
+  const { want, allowRemote, assets, ...call } = opts;
+  const backend = opts.backend ?? (await _defaultBackend());
+  await _check(backend.info, { want, allowRemote, mode: 'image' });
+  const s = await _session(backend, { assets, mode: 'image' });
+  return _run(s, backend.info, image, call);
 }
