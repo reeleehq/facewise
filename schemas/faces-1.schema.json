@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "faces/1 FaceResult",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "faces/1"
+    },
+    "backend": {
+      "type": "string"
+    },
+    "image": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "height": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ]
+    },
+    "faces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "box": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "w": {
+                "type": "number",
+                "minimum": 0
+              },
+              "h": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "w",
+              "h"
+            ]
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "keypoints": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "enum": [
+                "rightEye",
+                "leftEye",
+                "noseTip",
+                "mouthCenter",
+                "mouthRight",
+                "mouthLeft",
+                "rightEar",
+                "leftEar"
+              ]
+            },
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                },
+                "z": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ]
+            }
+          },
+          "mesh": {
+            "type": "object",
+            "properties": {
+              "topology": {
+                "type": "string"
+              },
+              "points": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    },
+                    "z": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "topology",
+              "points"
+            ]
+          },
+          "pose": {
+            "type": "object",
+            "properties": {
+              "yaw": {
+                "type": "number"
+              },
+              "pitch": {
+                "type": "number"
+              },
+              "roll": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "yaw",
+              "pitch",
+              "roll"
+            ]
+          },
+          "blendshapes": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "quality": {
+            "type": "object",
+            "properties": {
+              "blur": {
+                "type": "number"
+              },
+              "occluded": {
+                "type": "number"
+              },
+              "exposure": {
+                "type": "number"
+              }
+            }
+          },
+          "embedding": {
+            "type": "object",
+            "properties": {
+              "space": {
+                "type": "string"
+              },
+              "vector": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "normalized": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "space",
+              "vector",
+              "normalized"
+            ]
+          },
+          "ref": {
+            "type": "object",
+            "properties": {
+              "backend": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "expiresAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "backend",
+              "id"
+            ]
+          },
+          "trackId": {
+            "type": "string"
+          },
+          "extras": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "box",
+          "score"
+        ]
+      }
+    },
+    "notes": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "backend",
+    "image",
+    "faces"
+  ]
+}

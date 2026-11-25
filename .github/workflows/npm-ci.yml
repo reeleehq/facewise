@@ -1,0 +1,16 @@
+# npm auth: trusted publishing (OIDC) only. Never add an NPM_TOKEN secret.
+# Publishing is opt-in: a push to main whose commit message contains "[publish-npm]".
+# The first publish of the name is done locally by the maintainer (npm requires it).
+name: NPM CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  npm-ci:
+    uses: i2mint/wads/.github/workflows/npm-ci.yml@master
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      package-dir: .
